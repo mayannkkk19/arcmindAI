@@ -14,7 +14,6 @@ interface DoubtResponse {
 export function useAskDoubt() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
 
   const askDoubt = async (
     generationId: string,
@@ -45,11 +44,6 @@ export function useAskDoubt() {
         return null;
       }
     } catch (err) {
-      // Check if it's a 503 error (API key issue)
-      if (axios.isAxiosError(err) && err.response?.status === 503) {
-        setShowApiKeyDialog(true);
-      }
-
       const errorMessage =
         axios.isAxiosError(err) && err.response?.data?.message
           ? err.response.data.message
@@ -63,15 +57,9 @@ export function useAskDoubt() {
     }
   };
 
-  const closeApiKeyDialog = () => {
-    setShowApiKeyDialog(false);
-  };
-
   return {
     askDoubt,
     isLoading,
     error,
-    showApiKeyDialog,
-    closeApiKeyDialog,
   };
 }

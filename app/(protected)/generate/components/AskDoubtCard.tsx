@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Send, Bot, User, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAskDoubt } from "../hooks/useAskDoubt";
-import { ApiKeyDialog } from "@/components/api-key-dialog";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -41,7 +40,7 @@ export default function AskDoubtCard({
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const loadedGenerationIdRef = useRef<string | null>(null);
-  const { askDoubt, isLoading, error, showApiKeyDialog, closeApiKeyDialog } =
+  const { askDoubt, isLoading, error } =
     useAskDoubt();
   const [userPlan, setUserPlan] = useState<string | null>(null);
   const [doubtChatCount, setDoubtChatCount] = useState<number>(0);
@@ -218,15 +217,6 @@ export default function AskDoubtCard({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <ApiKeyDialog
-        isOpen={showApiKeyDialog}
-        onClose={closeApiKeyDialog}
-        onSuccess={() => {
-          closeApiKeyDialog();
-          toast.info("API keys saved. Please try asking your question again.");
-        }}
-      />
-
       <SheetContent
         side="right"
         className="w-full sm:max-w-lg flex flex-col p-0"
