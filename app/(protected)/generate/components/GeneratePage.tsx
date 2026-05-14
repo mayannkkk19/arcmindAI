@@ -130,7 +130,7 @@ export default function GeneratePage() {
                     ? "text-orange-500 font-medium"
                     : userInput.length >= 1500
                     ? "text-amber-400"
-                    : "text-muted-foreground"}`
+                    : "text-muted-foreground"}`;
 
   return (
     <div className="container mx-auto p-6 space-y-6">
