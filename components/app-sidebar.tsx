@@ -74,7 +74,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       }
 
       if (dateFilter === "30days") {
-      
         return matchesSearch && diffDays <= 30;
       }
 
