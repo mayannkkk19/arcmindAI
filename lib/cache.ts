@@ -20,10 +20,9 @@ export async function withCache<T>(
   }
 
   const value = await fetcher();
-  console.log(key, value, typeof value);
 
   redis
-    .set(key, value as unknown as string, { ex: ttlSeconds })
+    .set(key, value as unknown, { ex: ttlSeconds })
     .catch((err) =>
       console.warn(`Failed to set cache for key=${key}:`, err),
     );
