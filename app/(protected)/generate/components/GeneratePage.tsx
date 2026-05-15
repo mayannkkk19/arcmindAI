@@ -9,6 +9,7 @@ import { useState } from "react";
 import MermaidDiagram from "./mermaidDiagram";
 import CopyDiagramButton from "./CopyDiagramButton";
 import { ArchitectureData } from "../utils/types";
+import { cleanMermaidString } from "../utils/cleanMermaidString";
 import MicroservicesSection from "./MicroservicesSection";
 import EntitiesSection from "./EntitiesSection";
 import ApiRoutesSection from "./ApiRoutesSection";
@@ -29,24 +30,6 @@ export default function GeneratePage() {
   const [generatedData, setGeneratedData] = useState<ArchitectureData | null>(
     null,
   );
-
-  function cleanMermaidString(input: string | undefined | null): string {
-    if (!input || typeof input !== "string") return "";
-
-    return (
-      input
-        // Remove code block markers if present (for backward compatibility)
-        .replace(/^```mermaid\n?/g, "")
-        .replace(/\n?```$/g, "")
-        .replace(/```/g, "")
-        // Convert escaped newlines to actual newlines
-        .replace(/\\n/g, "\n")
-        // Handle any other escaped characters
-        .replace(/\\"/g, '"')
-        .replace(/\\'/g, "'")
-        .trim()
-    );
-  }
 
   const handleGenerate = async () => {
     const result = await generate(userInput);

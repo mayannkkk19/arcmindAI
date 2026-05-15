@@ -16,14 +16,8 @@ export function useGenerateSystem(refetchHistory?: () => Promise<void>) {
   const generate = async (
     userInput: string,
   ): Promise<GenerateResponse | null> => {
-    // TEMP: Bypass session check for local development
-    const effectiveSession =
-      process.env.NODE_ENV === "development"
-        ? session || { user: { id: "dev-user", accessToken: "dev-token" } }
-        : session;
-
     // @ts-expect-error accessToken is added to session in NextAuth callbacks
-    if (!effectiveSession?.user?.accessToken) {
+    if (!session?.user?.accessToken) {
       setError("No access token available. Please log in.");
       return null;
     }
@@ -35,7 +29,7 @@ export function useGenerateSystem(refetchHistory?: () => Promise<void>) {
       const response = await axios.post(DOC_ROUTES.API.GENERATE.ROOT, {
         userInput,
         // @ts-expect-error accessToken is added to session in NextAuth callbacks
-        userId: effectiveSession?.user.id,
+        userId: session?.user.id,
       });
 
       if (response.status < 200 || response.status >= 300) {

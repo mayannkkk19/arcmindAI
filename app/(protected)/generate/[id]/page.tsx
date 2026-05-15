@@ -38,6 +38,7 @@ import Lottie from "lottie-react";
 import animationData from "@/components/loaderLottie.json";
 import { DOC_ROUTES } from "@/lib/routes";
 import { ArchitectureData } from "../utils/types";
+import { cleanMermaidString } from "../utils/cleanMermaidString";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -139,21 +140,6 @@ export default function GenerationPage() {
     }
     setIsDeleteDialogOpen(false);
   };
-
-  function cleanMermaidString(input: string | undefined | null): string {
-    if (!input || typeof input !== "string") return "";
-
-    return (
-      input
-        .replace(/^```mermaid\n?/g, "")
-        .replace(/\n?```$/g, "")
-        .replace(/```/g, "")
-        .replace(/\\n/g, "\n")
-        .replace(/\\"/g, '"')
-        .replace(/\\'/g, "'")
-        .trim()
-    );
-  }
 
   if (isLoading) {
     return (
