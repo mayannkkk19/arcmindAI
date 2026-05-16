@@ -5,6 +5,10 @@ const redis = new Redis({
     token: process.env.UPSTASH_REDIS_REST_TOKEN!
 });
 
+export function getCacheKey(keyword: string, userId: string, ...args: string[]): string {
+  return `${keyword}:${userId}:${args.join('/')}`
+}
+
 export async function withCache<T>(
   key: string,
   ttlSeconds: number,
@@ -21,11 +25,11 @@ export async function withCache<T>(
 
   const value = await fetcher();
 
-  redis
-    .set(key, value as unknown, { ex: ttlSeconds })
-    .catch((err) =>
-      console.warn(`Failed to set cache for key=${key}:`, err),
-    );
+  try {
+    await redis.set(key, value, { ex: ttlSeconds });
+  } catch (err) {
+    console.warn(`Failed to set cache for key=${key}:`, err);
+  }
 
   return value;
 }
