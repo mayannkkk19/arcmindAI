@@ -49,11 +49,6 @@ export const authOptions: AuthOptions = {
             (req?.headers?.["x-real-ip"] as string) ||
             "unknown";
           
-          // Validate IP - should not be a path or unusual characters
-          if (ip && (ip.startsWith("/") || ip.includes("/"))) {
-            ip = "unknown";
-          }
-          
           // Handle comma-separated IPs (take first one from x-forwarded-for)
           if (ip && ip.includes(",")) {
             ip = ip.split(",")[0].trim();

@@ -32,16 +32,6 @@ export default function GenerateLayout({
   const pathname = usePathname();
   const { history } = useHistory();
 
-  // useEffect(() => {
-  //   if (status === "loading") return;
-  //   if (!session) {
-  //     router.push(DOC_ROUTES.AUTH.LOGIN);
-  //   }
-  // }, [session, status, router]);
-
-  // if (!session) {
-  //   return null;
-  // }
 
   // Generate breadcrumbs based on current path and sidebar data
   const generateBreadcrumbs = () => {
@@ -109,4 +99,4 @@ export default function GenerateLayout({
       </SidebarInset>
     </SidebarProvider>
   );
-}
+} 
