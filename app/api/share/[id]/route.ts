@@ -1,3 +1,7 @@
+import {
+  httpRequestsTotal,
+  httpRequestDurationSeconds,
+} from "@/lib/metrics";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/prisma";
 
@@ -6,6 +10,12 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
 
+  const startTime = Date.now();
+
+const route = "/api/share/[id]";
+const method = "GET";
+
+httpRequestsTotal.inc({ route, method });
   try {
 
     const generation = await db.generation.findFirst({
@@ -22,11 +32,21 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(generation);
+    httpRequestDurationSeconds.observe(
+  { route },
+  (Date.now() - startTime) / 1000,
+);
+
+return NextResponse.json(generation);
 
   } catch (error) {
 
-    console.log(error);
+    console.error(error);
+
+    httpRequestDurationSeconds.observe(
+  { route },
+  (Date.now() - startTime) / 1000,
+);
 
     return NextResponse.json(
       { error: "Something went wrong" },

@@ -131,14 +131,20 @@ export default function GenerationPage() {
   try {
 
     const response = await fetch(`/api/generate/${id}`, {
-      method: "PATCH",
-    });
+  method: "PATCH",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    userId: "temp-user",
+  }),
+});
     const data = await response.json();
     if (data.success) {
       const shareUrl =
-        `${window.location.origin}/api/share/${data.shareId}`;
+        `${window.location.origin}/share/${data.shareId}`
       await navigator.clipboard.writeText(shareUrl);
-      alert("Share link copied!");
+      window.open(shareUrl, "_blank");
     }
   } catch (error) {
     console.error("Share failed:", error);
