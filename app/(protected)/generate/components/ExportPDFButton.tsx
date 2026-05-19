@@ -6,10 +6,11 @@ import generatePDF from "../utils/exportPDF";
 import { ArchitectureData } from "../utils/types";
 import { useState } from "react";
 import type { VariantProps } from "class-variance-authority";
+import type React from "react";
 
 interface ExportPDFButtonProps {
   data: ArchitectureData;
-  diagramElement?: HTMLElement | null;
+  diagramRef?: React.RefObject<HTMLDivElement | null>;
   // styling overrides to allow prominent placement
   variant?: VariantProps<typeof buttonVariants>["variant"];
   size?: VariantProps<typeof buttonVariants>["size"];
@@ -19,7 +20,7 @@ interface ExportPDFButtonProps {
 
 export default function ExportPDFButton({
   data,
-  diagramElement,
+  diagramRef,
   variant,
   size,
   className,
@@ -30,6 +31,7 @@ export default function ExportPDFButton({
   const handleExportPDF = async () => {
     try {
       setIsExporting(true);
+      const diagramElement = diagramRef?.current ?? null;
       await generatePDF({
         data,
         diagramElement,

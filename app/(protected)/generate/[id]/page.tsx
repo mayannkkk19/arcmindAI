@@ -76,34 +76,37 @@ export default function GenerationPage() {
   const mermaidContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const fetchGeneration = async () => {
-      if (id && typeof id === "string") {
-        const result = await getGenerationById(id);
-        if (result && result.success) {
-          setSystemName(result.output.userInput || "");
-          if (result.output.githubGeneration) {
-            setGithubGeneration(result.output.githubGeneration);
-            setIsGithubRepo(true);
-            setGeneratedData(null);
-          } else {
-            try {
-              const data = result.output.generatedOutput as ArchitectureData;
-              setGeneratedData(data);
-              setIsGithubRepo(false);
-              setGithubGeneration(null);
-            } catch (error) {
-              console.error("Error processing generation data:", error);
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        if (id && typeof id === "string") {
+          const result = await getGenerationById(id);
+          if (result && result.success) {
+            setSystemName(result.output.userInput || "");
+            if (result.output.githubGeneration) {
+              setGithubGeneration(result.output.githubGeneration);
+              setIsGithubRepo(true);
               setGeneratedData(null);
+            } else {
+              try {
+                const data = result.output.generatedOutput as ArchitectureData;
+                setGeneratedData(data);
+                setIsGithubRepo(false);
+                setGithubGeneration(null);
+              } catch (error) {
+                console.error("Error processing generation data:", error);
+                setGeneratedData(null);
+              }
             }
+          } else {
+            setGeneratedData(null);
+            setGithubGeneration(null);
           }
-        } else {
-          setGeneratedData(null);
-          setGithubGeneration(null);
         }
-      }
-    };
-    fetchGeneration();
-  }, [id]);
+      })();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [getGenerationById, id]);
 
   const handleUpdate = async () => {
     if (!id || typeof id !== "string" || !responseText.trim()) return;
@@ -348,7 +351,7 @@ export default function GenerationPage() {
             </Button>
             <ExportPDFButton
               data={generatedData}
-              diagramElement={mermaidContainerRef.current}
+              diagramRef={mermaidContainerRef}
               variant="default"
               size="lg"
               className="rounded-2xl px-8"
@@ -459,7 +462,7 @@ export default function GenerationPage() {
                   <CopyDiagramButton code={cleanedDiagram} />
                   <ExportPDFButton
                     data={generatedData}
-                    diagramElement={mermaidContainerRef.current}
+                    diagramRef={mermaidContainerRef}
                     variant="outline"
                     size="sm"
                     className="rounded-xl"

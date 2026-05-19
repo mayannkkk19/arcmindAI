@@ -52,18 +52,18 @@ export default function GeneratePage() {
 
   const handleRef = (el: HTMLTextAreaElement | null) => {
     textareaRef.current = el;
-    if (registerField.ref) {
-      if (typeof registerField.ref === "function") {
-        registerField.ref(el);
-      } else if ("current" in registerField.ref) {
+    if (registerRef) {
+      if (typeof registerRef === "function") {
+        registerRef(el);
+      } else if ("current" in registerRef) {
         (
-          registerField.ref as React.MutableRefObject<HTMLTextAreaElement | null>
+          registerRef as React.MutableRefObject<HTMLTextAreaElement | null>
         ).current = el;
       }
     }
   };
 
-  const { ref, ...restRegisterField } = registerField;
+  const { ref: registerRef, ...restRegisterField } = registerField;
 
   const MAX_INPUT_LENGTH = 2000;
 
@@ -273,7 +273,7 @@ export default function GeneratePage() {
             <div className="flex justify-center items-center gap-3 mt-4">
               <ExportPDFButton
                 data={generatedData}
-                diagramElement={mermaidContainerRef.current}
+                diagramRef={mermaidContainerRef}
                 variant="default"
                 size="lg"
                 className="rounded-2xl px-8"
@@ -363,7 +363,7 @@ export default function GeneratePage() {
                     />
                     <ExportPDFButton
                       data={generatedData}
-                      diagramElement={mermaidContainerRef.current}
+                      diagramRef={mermaidContainerRef}
                       variant="outline"
                       size="sm"
                       className="rounded-xl"

@@ -11,7 +11,6 @@ const PDF_WIDTH = 210; // A4 width in mm
 const PDF_HEIGHT = 297; // A4 height in mm
 const MARGIN = 15; // margins in mm
 const CONTENT_WIDTH = PDF_WIDTH - 2 * MARGIN;
-const LINE_HEIGHT = 7;
 const SMALL_FONT_SIZE = 10;
 const NORMAL_FONT_SIZE = 11;
 const TITLE_FONT_SIZE = 16;
@@ -232,10 +231,43 @@ const generatePDF = async (options: PDFExportOptions): Promise<void> => {
     addSectionTitle("Architecture Diagram");
 
     try {
-      const diagramImage = await htmlToImage.toPng(diagramElement, {
+      // Create a cloned wrapper to avoid capturing page-level styles like
+      // `backdrop-filter` or semi-transparent background utilities which can
+      // make the exported image look "see-through". We render the clone
+      // off-screen with a forced white background and then capture it.
+      const wrapper = document.createElement("div");
+      wrapper.style.position = "fixed";
+      wrapper.style.left = "-9999px";
+      wrapper.style.top = "-9999px";
+      wrapper.style.background = "#ffffff";
+      wrapper.style.padding = "0";
+
+      const clone = diagramElement.cloneNode(true) as HTMLElement;
+
+      // Ensure the clone has a white background and no backdrop filter or
+      // opacity so it renders solidly in the image.
+      clone.style.background = "#ffffff";
+      clone.style.backdropFilter = "none";
+      (clone.style as any).webkitBackdropFilter = "none";
+      clone.style.opacity = "1";
+
+      // Also try to force any child elements to be opaque (helps with SVGs
+      // that inherit transparency from CSS variables/classes).
+      clone.querySelectorAll<HTMLElement>("*").forEach((el) => {
+        el.style.background = el.style.background || "transparent";
+        el.style.opacity = el.style.opacity || "1";
+      });
+
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+
+      const diagramImage = await htmlToImage.toPng(clone, {
         backgroundColor: "#ffffff",
         pixelRatio: 2,
       });
+
+      // cleanup the temporary wrapper
+      document.body.removeChild(wrapper);
 
       const img = new Image();
       img.src = diagramImage;
