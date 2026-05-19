@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { downloadMarkdownFile } from "../utils/generate-markdown";
 import {
   MermaidDiagram,
   CopyDiagramButton,
+  ExportPDFButton,
   MicroservicesSection,
   EntitiesSection,
   ApiRoutesSection,
@@ -72,6 +73,7 @@ export default function GenerationPage() {
 
   const [responseText, setResponseText] = useState("");
   const [doubtText, setDoubtText] = useState("");
+  const mermaidContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchGeneration = async () => {
@@ -235,12 +237,17 @@ export default function GenerationPage() {
         </Card>
 
         <section>
-          {/* Section header with copy button */}
+          {/* Section header with copy button and export PDF button */}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold">Architecture Diagram</h2>
             <CopyDiagramButton code={cleanedGithubDiagram} />
           </div>
-          <MermaidDiagram chart={cleanedGithubDiagram} />
+          <div
+            ref={mermaidContainerRef}
+            className="rounded-2xl border border-border/40 bg-card/30 p-8 overflow-hidden backdrop-blur-sm shadow-inner"
+          >
+            <MermaidDiagram chart={cleanedGithubDiagram} />
+          </div>
         </section>
       </div>
     );
@@ -339,6 +346,13 @@ export default function GenerationPage() {
               <Code2 className="mr-2 h-4 w-4 text-muted-foreground" />
               Task Generation
             </Button>
+            <ExportPDFButton
+              data={generatedData}
+              diagramElement={mermaidContainerRef.current}
+              variant="default"
+              size="lg"
+              className="rounded-2xl px-8"
+            />
             <Button
               variant="outline"
               className="h-10 px-6 rounded-xl border-border/60 hover:border-border bg-card/50 transition-all duration-300 shadow-sm"
@@ -441,9 +455,21 @@ export default function GenerationPage() {
                     Architecture Visual
                   </h2>
                 </div>
-                <CopyDiagramButton code={cleanedDiagram} />
+                <div className="flex items-center gap-3">
+                  <CopyDiagramButton code={cleanedDiagram} />
+                  <ExportPDFButton
+                    data={generatedData}
+                    diagramElement={mermaidContainerRef.current}
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                  />
+                </div>
               </div>
-              <div className="rounded-2xl border border-border/40 bg-card/30 p-8 overflow-hidden backdrop-blur-sm shadow-inner">
+              <div
+                ref={mermaidContainerRef}
+                className="rounded-2xl border border-border/40 bg-card/30 p-8 overflow-hidden backdrop-blur-sm shadow-inner"
+              >
                 <MermaidDiagram chart={cleanedDiagram} />
               </div>
             </section>

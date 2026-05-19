@@ -269,6 +269,16 @@ export default function GeneratePage() {
                 {generatedData.summary}
               </p>
             </div>
+            {/* Primary actions: Export PDF visible immediately after generation */}
+            <div className="flex justify-center items-center gap-3 mt-4">
+              <ExportPDFButton
+                data={generatedData}
+                diagramElement={mermaidContainerRef.current}
+                variant="default"
+                size="lg"
+                className="rounded-2xl px-8"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-16 pt-8">
@@ -354,6 +364,9 @@ export default function GeneratePage() {
                     <ExportPDFButton
                       data={generatedData}
                       diagramElement={mermaidContainerRef.current}
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl"
                     />
                   </div>
                 </div>

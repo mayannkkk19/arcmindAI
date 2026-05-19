@@ -1,19 +1,29 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import generatePDF from "../utils/exportPDF";
 import { ArchitectureData } from "../utils/types";
 import { useState } from "react";
+import type { VariantProps } from "class-variance-authority";
 
 interface ExportPDFButtonProps {
   data: ArchitectureData;
   diagramElement?: HTMLElement | null;
+  // styling overrides to allow prominent placement
+  variant?: VariantProps<typeof buttonVariants>["variant"];
+  size?: VariantProps<typeof buttonVariants>["size"];
+  className?: string;
+  ariaLabel?: string;
 }
 
 export default function ExportPDFButton({
   data,
   diagramElement,
+  variant,
+  size,
+  className,
+  ariaLabel,
 }: ExportPDFButtonProps) {
   const [isExporting, setIsExporting] = useState(false);
 
@@ -36,9 +46,10 @@ export default function ExportPDFButton({
     <Button
       onClick={handleExportPDF}
       disabled={isExporting}
-      variant="outline"
-      size="sm"
-      className="rounded-xl transition-all duration-300"
+      variant={variant ?? "outline"}
+      size={size ?? "sm"}
+      className={`${className ?? "rounded-xl transition-all duration-300"}`}
+      aria-label={ariaLabel ?? "Export PDF"}
     >
       {isExporting ? (
         <>
