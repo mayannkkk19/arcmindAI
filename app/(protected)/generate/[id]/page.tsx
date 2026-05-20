@@ -379,7 +379,7 @@ export default function GenerationPage() {
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
-                    className="h-10 px-6 rounded-xl border-border/60 hover:border-border bg-card/50 transition-all duration-300"
+                    className="h-10 px-6 cursor-pointer rounded-xl border-border/60 hover:border-border bg-card/50 transition-all duration-300"
                     onClick={handleShare}
                   >
                     <Info className="mr-2 h-4 w-4 text-muted-foreground" />

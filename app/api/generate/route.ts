@@ -1,4 +1,3 @@
-import { nanoid } from "nanoid";
 import { NextRequest, NextResponse } from "next/server";
 import { invokeGeminiWithFallback } from "@/app/(protected)/generate/utils/aiClient";
 import { SystemPrompt } from "@/lib/prompts/promptTemplate";
@@ -355,43 +354,6 @@ export async function POST(req: NextRequest) {
           "An unexpected server error occurred while generating the response.",
       },
       { status },
-    );
-  }
-}
-export async function PATCH(
-  req: Request,
-  { params }: { params: { id: string } },
-) {
-  try {
-    const body = await req.json();
-    const { userId } = body;
-
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const updatedGeneration = await db.generation.update({
-      where: {
-        id: params.id,
-        userId,
-      },
-
-      data: {
-        isPublic: true,
-        shareId: nanoid(10),
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      shareId: updatedGeneration.shareId,
-    });
-  } catch (error) {
-    console.error(error);
-
-    return NextResponse.json(
-      { error: "Failed to share generation" },
-      { status: 500 },
     );
   }
 }
