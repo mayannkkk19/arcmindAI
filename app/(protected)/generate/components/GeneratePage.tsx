@@ -30,7 +30,7 @@ export default function GeneratePage() {
   const { 
     generate,
     isLoading,
-    error: generateError,
+    error: generateError, 
   } = useGenerateSystem(refetch);
   const { register, watch, setValue } = useForm();
   const [generatedData, setGeneratedData] = useState<ArchitectureData | null>(
@@ -39,11 +39,11 @@ export default function GeneratePage() {
   const [streamingProgress, setStreamingProgress] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const submittedTextRef = useRef<string>("");
+  const submittedTextRef = useRef<string>(""); 
 
   const userInput = watch("userInput", "");
 
-   const cleanInput = (input: string) => {
+   const cleanInput = (input: string) => { 
   return input
         // Remove code block markers if present (for backward compatibility)
         .replace(/^```mermaid\n?/g, "")

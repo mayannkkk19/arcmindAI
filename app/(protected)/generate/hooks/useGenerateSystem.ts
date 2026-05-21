@@ -96,7 +96,7 @@ export function useGenerateSystem(refetchHistory?: () => Promise<void>) {
 
       if (parsed && typeof parsed.chunk === "string") {
         output += parsed.chunk;
-        onChunk?.(parsed.chunk);
+        onChunk?.(parsed.chunk); 
       }
     } catch (error) {
       console.error("Failed to parse final SSE chunk:", dataStr);
