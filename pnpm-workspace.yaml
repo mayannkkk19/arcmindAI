@@ -1,2 +1,12 @@
+packages:
+  - '.'
+  - 'packages/*'
+  - 'apps/*'
+  - 'libs/*'
+  - 'components/*'
+
 allowBuilds:
-  core-js: set this to true or false
+  core-js: true
+
+# Adjust the `packages` globs above if your workspace uses different folders.
+# Including '.' ensures a single-package repository (root) is a valid workspace member.
