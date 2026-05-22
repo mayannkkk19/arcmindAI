@@ -7,12 +7,26 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
 
-// Create rate limiter: 1 request per 2 minutes (120 seconds)
-export const generationRateLimit = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(2, "120 s"), // 1 request per 120 seconds
-  analytics: true, // Optional: Enable analytics
-});
+// Plan-aware generation rate limiters
+export const generationRateLimits = {
+  free: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(5, "1 h"),
+    analytics: true,
+  }),
+
+  pro: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(50, "1 h"),
+    analytics: true,
+  }),
+
+  enterprise: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(200, "1 h"),
+    analytics: true,
+  }),
+};
 
 export const otpRateLimit = new Ratelimit({
   redis,
