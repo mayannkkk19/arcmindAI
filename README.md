@@ -98,6 +98,7 @@ Required environment variables:
 - `GOOGLE_REFRESH_TOKEN`: For server-side Google API access
 - `GOOGLE_REDIRECT_URI`: Redirect URI registered with Google
 - `GEMINI_API_KEY`: Google Gemini AI API Key
+- `GEMINI_API_KEY_ALTERNATE`: Secondary/fallback Gemini API key for Tier 3 AI fallback
 
 **GitHub Integration:**
 
