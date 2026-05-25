@@ -151,17 +151,10 @@ export async function POST(req: NextRequest) {
   httpRequestsTotal.inc({ route, method });
 
   try {
-    // SECURE AUTH — get userId from server session
     const session = await getServerSession(authOptions);
-
     // @ts-expect-error id is added to session in session callback
-    const userId = session?.user?.id;
-
-    if (!userId) {
-      apiGatewayErrorsTotal.inc({ status_code: "401" });
-
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const userId = session?.user?.id as string | undefined;
+    const isGuest = !userId;
 
     const body = await req.json().catch(() => null);
 
@@ -192,48 +185,65 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Fetch authenticated user
-    const userFindStart = Date.now();
+    let user: { plan: string; isVerified: boolean } | null = null;
+    let userPlan: "free" | "pro" | "enterprise" = "free";
 
-    const user = await db.user.findFirst({
-      where: { id: userId },
-    });
+    if (!isGuest) {
+      const userFindStart = Date.now();
 
-    databaseQueryDurationSeconds.observe(
-      { operation: "findFirst" },
-      (Date.now() - userFindStart) / 1000,
-    );
+      user = await db.user.findFirst({
+        where: { id: userId },
+        select: {
+          plan: true,
+          isVerified: true,
+        },
+      });
 
-    if (!user) {
-      apiGatewayErrorsTotal.inc({ status_code: "404" });
-
-      httpRequestDurationSeconds.observe(
-        { route },
-        (Date.now() - startTime) / 1000,
+      databaseQueryDurationSeconds.observe(
+        { operation: "findFirst" },
+        (Date.now() - userFindStart) / 1000,
       );
 
-      return NextResponse.json(
-        { status: 404, message: "User not Found" },
-        { status: 404 },
-      );
-    }
+      if (!user) {
+        apiGatewayErrorsTotal.inc({ status_code: "404" });
 
-    if (user.isVerified === false) {
-      apiGatewayErrorsTotal.inc({ status_code: "401" });
+        httpRequestDurationSeconds.observe(
+          { route },
+          (Date.now() - startTime) / 1000,
+        );
 
-      httpRequestDurationSeconds.observe(
-        { route },
-        (Date.now() - startTime) / 1000,
-      );
+        return NextResponse.json(
+          { status: 404, message: "User not Found" },
+          { status: 404 },
+        );
+      }
 
-      return NextResponse.json(
-        { status: 401, message: "Email is not verified" },
-        { status: 401 },
-      );
+      if (user.isVerified === false) {
+        apiGatewayErrorsTotal.inc({ status_code: "401" });
+
+        httpRequestDurationSeconds.observe(
+          { route },
+          (Date.now() - startTime) / 1000,
+        );
+
+        return NextResponse.json(
+          { status: 401, message: "Email is not verified" },
+          { status: 401 },
+        );
+      }
+
+      userPlan =
+        user.plan === "enterprise"
+          ? "enterprise"
+          : user.plan === "pro"
+            ? "pro"
+            : "free";
     }
 
     // RATE LIMITING — skip only if user has their own Gemini API key
-    const userApiKeys = await getUserApiKeys(userId);
+    const userApiKeys = isGuest
+      ? { geminiApiKey: null }
+      : await getUserApiKeys(userId as string);
 
     const hasOwnApiKey = !!userApiKeys.geminiApiKey;
 
@@ -241,15 +251,15 @@ export async function POST(req: NextRequest) {
     let remaining: number | null = null;
     let reset: number | null = null;
 
-    if (!hasOwnApiKey) {
+    if (!hasOwnApiKey && !isGuest) {
       const rateLimiter =
-        user.plan === "enterprise"
+        userPlan === "enterprise"
           ? generationRateLimits.enterprise
-          : user.plan === "pro"
+          : userPlan === "pro"
             ? generationRateLimits.pro
             : generationRateLimits.free;
 
-      const result = await rateLimiter.limit(userId);
+      const result = await rateLimiter.limit(userId as string);
 
       const { success } = result;
 
@@ -268,7 +278,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             error:
-              user.plan === "free"
+              userPlan === "free"
                 ? "Free users can generate 5 architectures per hour."
                 : "Rate limit exceeded. Please try again later.",
             retryAfter: new Date(reset).toISOString(),
@@ -282,7 +292,12 @@ export async function POST(req: NextRequest) {
 
     aiGenerationRequestsTotal.inc();
 
-    userLastActivityTimestamp.set({ user_id: userId }, Date.now() / 1000);
+    if (!isGuest) {
+      userLastActivityTimestamp.set(
+        { user_id: userId as string },
+        Date.now() / 1000,
+      );
+    }
 
     const messages = [
       new SystemMessage(SystemPrompt),
@@ -293,7 +308,7 @@ export async function POST(req: NextRequest) {
 
     const stream = await streamGeminiWithFallback(
       messages,
-      userApiKeys.geminiApiKey,
+      userApiKeys.geminiApiKey || undefined,
     );
 
     const encoder = new TextEncoder();
@@ -331,28 +346,35 @@ export async function POST(req: NextRequest) {
 
           const parsedData = parseAIResponse(fullResponse);
 
-          const createStart = Date.now();
+          if (!isGuest) {
+            const createStart = Date.now();
 
-          await db.generation.create({
-            data: {
-              userInput,
-              generatedOutput: parsedData,
-              userId,
-            },
-          });
+            await db.generation.create({
+              data: {
+                userInput,
+                generatedOutput: parsedData,
+                userId: userId as string,
+              },
+            });
 
-          databaseQueryDurationSeconds.observe(
-            { operation: "create" },
-            (Date.now() - createStart) / 1000,
-          );
+            databaseQueryDurationSeconds.observe(
+              { operation: "create" },
+              (Date.now() - createStart) / 1000,
+            );
+          }
 
           aiGenerationSuccessTotal.inc();
 
-          userGenerationsTotal.inc({
-            user_id: userId,
-          });
+          if (!isGuest) {
+            userGenerationsTotal.inc({
+              user_id: userId as string,
+            });
 
-          userLastActivityTimestamp.set({ user_id: userId }, Date.now() / 1000);
+            userLastActivityTimestamp.set(
+              { user_id: userId as string },
+              Date.now() / 1000,
+            );
+          }
 
           aiGenerationOutputSizeBytes.set(JSON.stringify(parsedData).length);
 
