@@ -349,7 +349,7 @@ export async function POST(req: NextRequest) {
           await db.generation.create({
             data: {
               userInput,
-              generatedOutput: parsedData,
+              generatedOutput: parsedData as any,
               userId,
             },
           });
