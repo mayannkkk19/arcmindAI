@@ -64,7 +64,6 @@
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.575.0",
     "mermaid": "^11.14.0",
-    "mongoose": "^9.6.2",
     "nanoid": "^5.1.11",
     "next": "16.2.6",
     "next-auth": "^4.24.14",

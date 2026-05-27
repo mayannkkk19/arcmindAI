@@ -60,6 +60,39 @@ Generate structured system designs using AI. Describe your requirements and get 
 - GitHub OAuth App (for repository import)
 - Redis (for rate limiting, optional for development)
 
+## Docker Setup
+
+Run the full stack (MongoDB, Redis, and the Next.js app) with Docker Compose:
+[Docker Compose installation guide](https://docs.docker.com/compose/install/)
+
+```bash
+git clone https://github.com/SATYAM-PRATIBHAN/arcmindAI.git
+cd arcmindAI
+docker compose up --build -d
+```
+
+This starts:
+
+- **MongoDB** (replica set) on port 27017
+- **Redis** on port 6379
+- **Serverless Redis HTTP** (Upstash-compatible REST API) on port 8079
+- **Next.js dev server** on port 3000 with hot-reload
+
+The compose file overrides `DATABASE_URL` and `UPSTASH_REDIS_REST_URL` to point to the local containers — no external database or Redis needed.
+
+To stop and clean up:
+
+```bash
+docker compose down       # keep data
+docker compose down -v    # remove data volumes too
+```
+
+Rebuild after changing `package.json`:
+
+```bash
+docker compose up --build -d
+```
+
 ## Installation
 
 1. Clone the repository:
