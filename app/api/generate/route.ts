@@ -20,6 +20,7 @@ import {
   apiGatewayErrorsTotal,
   databaseQueryDurationSeconds,
 } from "@/lib/metrics";
+import { sendWebhook } from "@/lib/webhooks/sendWebhook";
 import { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -213,16 +214,18 @@ export async function POST(req: NextRequest) {
 
   httpRequestsTotal.inc({ route, method });
 
+  // SECURE AUTH — get userId from server session
+  const session = await getServerSession(authOptions);
+  // @ts-expect-error custom session user id
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    apiGatewayErrorsTotal.inc({ status_code: "401" });
+
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const session = await getServerSession(authOptions);
-    // @ts-expect-error id is added to session in session callback
-    const userId = session?.user?.id;
-
-    if (!userId) {
-      apiGatewayErrorsTotal.inc({ status_code: "401" });
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = await req.json().catch(() => null);
 
     if (!body || !body.userInput) {
@@ -365,12 +368,14 @@ export async function POST(req: NextRequest) {
 
           // Safe, wrapper-contained parsing execution context
           const parsedData = parseAIResponse(fullResponse);
+          // @ts-expect-error Prisma JSON value
+          const safeOutput: Prisma.InputJsonValue = parsedData; // Ensure the output is a valid JSON value
           const createStart = Date.now();
 
           await db.generation.create({
             data: {
               userInput,
-              generatedOutput: parsedData as Prisma.JsonObject,
+              generatedOutput: safeOutput,
               userId,
             },
           });
@@ -389,6 +394,17 @@ export async function POST(req: NextRequest) {
             { route },
             (Date.now() - startTime) / 1000,
           );
+
+          // Send webhook notification for successful generation
+          await sendWebhook({
+            userId,
+            event: "generation.success",
+            // @ts-expect-error Prisma JSON value
+            data: {
+              userInput,
+              generatedOutput: parsedData,
+            },
+          });
 
           controller.enqueue(
             encoder.encode(
@@ -464,6 +480,17 @@ export async function POST(req: NextRequest) {
       (Date.now() - startTime) / 1000,
     );
 
+    // Send webhook notification for failed generation
+    if (userId) {
+      await sendWebhook({
+        userId,
+        event: "generation.failed",
+        data: {
+          error:
+            error instanceof Error ? error.message : "Unknown generation error",
+        },
+      });
+    }
     return NextResponse.json(
       {
         error:
