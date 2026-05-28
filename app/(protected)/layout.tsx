@@ -2,6 +2,7 @@
 
 import { DOC_ROUTES } from "@/lib/routes";
 import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -12,13 +13,16 @@ export default function ProtectedLayout({
 }) {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const pathname = usePathname();
+
+  const isGuestAllowedRoute = pathname === DOC_ROUTES.GENERATE;
 
   useEffect(() => {
     if (status === "loading") return;
-    if (!session) {
+    if (!session && !isGuestAllowedRoute) {
       router.push(DOC_ROUTES.AUTH.LOGIN);
     }
-  }, [session, status, router]);
+  }, [session, status, router, isGuestAllowedRoute]);
 
   if (status === "loading") {
     return (
@@ -31,7 +35,7 @@ export default function ProtectedLayout({
     );
   }
 
-  if (!session) {
+  if (!session && !isGuestAllowedRoute) {
     return null;
   }
 

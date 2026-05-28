@@ -22,12 +22,6 @@ export function useGenerateSystem(refetchHistory?: () => Promise<void>) {
     userInput: string,
     onChunk?: (chunk: string) => void,
   ): Promise<GenerateResponse | null> => {
-    // @ts-expect-error accessToken is added to session in NextAuth callbacks
-    if (!session?.user?.accessToken) {
-      setError("No access token available. Please log in.");
-      return null;
-    }
-
     setIsLoading(true);
     setError(null);
     setRetryAfter(null);
@@ -41,8 +35,8 @@ export function useGenerateSystem(refetchHistory?: () => Promise<void>) {
         },
         body: JSON.stringify({
           userInput,
-          // @ts-expect-error accessToken is added to session in NextAuth callbacks
-          userId: session?.user.id,
+          // @ts-expect-error id is added to session in NextAuth callbacks
+          userId: session?.user?.id,
         }),
       });
 
@@ -137,8 +131,9 @@ export function useGenerateSystem(refetchHistory?: () => Promise<void>) {
         ...limitInfo,
       };
 
-      // Refetch history after successful generation
-      if (data.success && refetchHistory) {
+      // Refetch history only for logged-in users after successful generation
+      // @ts-expect-error id is added to session in NextAuth callbacks
+      if (data.success && refetchHistory && session?.user?.id) {
         await refetchHistory();
       }
 

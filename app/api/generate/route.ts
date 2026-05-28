@@ -22,7 +22,6 @@ import {
 } from "@/lib/metrics";
 import { sendWebhook } from "@/lib/webhooks/sendWebhook";
 import { Prisma } from "@prisma/client";
-
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -44,6 +43,7 @@ function extractTextFromChunk(chunk: unknown): string {
 
   const msgChunk = chunk as MessageChunk;
 
+  // Handle LangChain chunks which often have content as string or array
   if (msgChunk?.content !== undefined) {
     if (typeof msgChunk.content === "string") {
       return msgChunk.content;
@@ -79,20 +79,25 @@ function parseAIResponse(fullResponse: string): Record<string, unknown> {
 
   if (jsonStart !== -1) {
     jsonText = jsonText.slice(jsonStart + jsonStartMarker.length);
+
     const jsonEnd = jsonText.indexOf("```");
+
     if (jsonEnd !== -1) {
       jsonText = jsonText.slice(0, jsonEnd);
     }
   } else {
     const firstBrace = jsonText.indexOf("{");
+
     if (firstBrace !== -1) {
       let braceCount = 0;
       let lastBrace = -1;
 
       for (let i = firstBrace; i < jsonText.length; i++) {
         if (jsonText[i] === "{") braceCount++;
+
         if (jsonText[i] === "}") {
           braceCount--;
+
           if (braceCount === 0) {
             lastBrace = i;
             break;
@@ -183,13 +188,16 @@ function parseAIResponse(fullResponse: string): Record<string, unknown> {
 
   // Safe extraction of Mermaid visual blueprints
   const mermaidStartMarker = "```mermaid";
+
   const mermaidStart = fullResponse.indexOf(mermaidStartMarker);
 
   if (mermaidStart !== -1) {
     let mermaidText = fullResponse.slice(
       mermaidStart + mermaidStartMarker.length,
     );
+
     const mermaidEnd = mermaidText.indexOf("```");
+
     if (mermaidEnd !== -1) {
       mermaidText = mermaidText.slice(0, mermaidEnd);
     }
@@ -209,34 +217,33 @@ function parseAIResponse(fullResponse: string): Record<string, unknown> {
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
+
   const route = "/api/generate";
   const method = "POST";
 
   httpRequestsTotal.inc({ route, method });
 
-  // SECURE AUTH — get userId from server session
-  const session = await getServerSession(authOptions);
-  // @ts-expect-error custom session user id
-  const userId = session?.user?.id;
-
-  if (!userId) {
-    apiGatewayErrorsTotal.inc({ status_code: "401" });
-
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  let userId: string | undefined;
 
   try {
+    const session = await getServerSession(authOptions);
+    // @ts-expect-error id is added to session in session callback
+    userId = session?.user?.id as string | undefined;
+    const isGuest = !userId;
     const body = await req.json().catch(() => null);
 
     if (!body || !body.userInput) {
       apiGatewayErrorsTotal.inc({ status_code: "400" });
+
       httpRequestDurationSeconds.observe(
         { route },
         (Date.now() - startTime) / 1000,
       );
 
       return NextResponse.json(
-        { error: "Invalid request body. Missing 'userInput' field." },
+        {
+          error: "Invalid request body. Missing 'userInput' field.",
+        },
         { status: 400 },
       );
     }
@@ -245,49 +252,73 @@ export async function POST(req: NextRequest) {
 
     if (!userInput || userInput.trim().length === 0) {
       apiGatewayErrorsTotal.inc({ status_code: "400" });
+
       return NextResponse.json(
         { error: "Invalid input. Please provide a valid project idea." },
         { status: 400 },
       );
     }
 
-    const userFindStart = Date.now();
-    const user = await db.user.findFirst({
-      where: { id: userId },
-    });
+    let user: { plan: string; isVerified: boolean } | null = null;
+    let userPlan: "free" | "pro" | "enterprise" = "free";
 
-    databaseQueryDurationSeconds.observe(
-      { operation: "findFirst" },
-      (Date.now() - userFindStart) / 1000,
-    );
+    if (!isGuest) {
+      const userFindStart = Date.now();
 
-    if (!user) {
-      apiGatewayErrorsTotal.inc({ status_code: "404" });
-      httpRequestDurationSeconds.observe(
-        { route },
-        (Date.now() - startTime) / 1000,
+      user = await db.user.findFirst({
+        where: { id: userId },
+        select: {
+          plan: true,
+          isVerified: true,
+        },
+      });
+
+      databaseQueryDurationSeconds.observe(
+        { operation: "findFirst" },
+        (Date.now() - userFindStart) / 1000,
       );
 
-      return NextResponse.json(
-        { status: 404, message: "User not Found" },
-        { status: 404 },
-      );
+      if (!user) {
+        apiGatewayErrorsTotal.inc({ status_code: "404" });
+
+        httpRequestDurationSeconds.observe(
+          { route },
+          (Date.now() - startTime) / 1000,
+        );
+
+        return NextResponse.json(
+          { status: 404, message: "User not Found" },
+          { status: 404 },
+        );
+      }
+
+      if (user.isVerified === false) {
+        apiGatewayErrorsTotal.inc({ status_code: "401" });
+
+        httpRequestDurationSeconds.observe(
+          { route },
+          (Date.now() - startTime) / 1000,
+        );
+
+        return NextResponse.json(
+          { status: 401, message: "Email is not verified" },
+          { status: 401 },
+        );
+      }
+
+      userPlan =
+        user.plan === "enterprise"
+          ? "enterprise"
+          : user.plan === "pro"
+            ? "pro"
+            : "free";
     }
 
-    if (user.isVerified === false) {
-      apiGatewayErrorsTotal.inc({ status_code: "401" });
-      httpRequestDurationSeconds.observe(
-        { route },
-        (Date.now() - startTime) / 1000,
-      );
+    // RATE LIMITING — skip only if user has their own Gemini API key
+    const userApiKeys = isGuest
+      ? { geminiApiKey: null }
+      : await getUserApiKeys(userId as string);
 
-      return NextResponse.json(
-        { status: 401, message: "Email is not verified" },
-        { status: 401 },
-      );
-    }
-
-    const userApiKeys = await getUserApiKeys(userId);
     const hasOwnApiKey = !!userApiKeys.geminiApiKey;
 
     let limit: number | null = null;
@@ -295,20 +326,32 @@ export async function POST(req: NextRequest) {
     let reset: number | null = null;
 
     if (!hasOwnApiKey) {
-      const rateLimiter =
-        user.plan === "enterprise"
+      const rateLimiter = isGuest
+        ? generationRateLimits.guest
+        : userPlan === "enterprise"
           ? generationRateLimits.enterprise
-          : user.plan === "pro"
+          : userPlan === "pro"
             ? generationRateLimits.pro
             : generationRateLimits.free;
 
-      const result = await rateLimiter.limit(userId);
+      const forwardedFor = req.headers.get("x-forwarded-for");
+      const realIp = req.headers.get("x-real-ip");
+      const extractedIp =
+        (forwardedFor ? forwardedFor.split(",")[0].trim() : realIp) || "guest";
+
+      const limitKey = isGuest ? `guest_${extractedIp}` : (userId as string);
+
+      const result = await rateLimiter.limit(limitKey);
+
+      const { success } = result;
+
       limit = result.limit;
       remaining = result.remaining;
       reset = result.reset;
 
-      if (!result.success) {
+      if (!success) {
         apiGatewayErrorsTotal.inc({ status_code: "429" });
+
         httpRequestDurationSeconds.observe(
           { route },
           (Date.now() - startTime) / 1000,
@@ -316,8 +359,9 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json(
           {
-            error:
-              user.plan === "free"
+            error: isGuest
+              ? "Guest users can generate 1 architecture per day."
+              : userPlan === "free"
                 ? "Free users can generate 5 architectures per hour."
                 : "Rate limit exceeded. Please try again later.",
             retryAfter: new Date(reset).toISOString(),
@@ -327,8 +371,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Keep the rest of your existing AI generation logic BELOW this point
+
     aiGenerationRequestsTotal.inc();
-    userLastActivityTimestamp.set({ user_id: userId }, Date.now() / 1000);
+
+    if (!isGuest) {
+      userLastActivityTimestamp.set(
+        { user_id: userId as string },
+        Date.now() / 1000,
+      );
+    }
 
     const messages = [
       new SystemMessage(SystemPrompt),
@@ -336,12 +388,14 @@ export async function POST(req: NextRequest) {
     ];
 
     const aiStart = Date.now();
+
     const stream = await streamGeminiWithFallback(
       messages,
-      userApiKeys.geminiApiKey,
+      userApiKeys.geminiApiKey || undefined,
     );
 
     const encoder = new TextEncoder();
+
     let fullResponse = "";
 
     const readable = new ReadableStream({
@@ -349,45 +403,62 @@ export async function POST(req: NextRequest) {
         try {
           for await (const chunk of stream) {
             const text = extractTextFromChunk(chunk);
+
             if (!text) continue;
 
             fullResponse += text;
 
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ chunk: text })}\n\n`),
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  chunk: text,
+                })}\n\n`,
+              ),
             );
           }
 
           const aiDuration = (Date.now() - aiStart) / 1000;
+
           aiGenerationDurationSeconds.observe(aiDuration);
 
           if (!fullResponse.trim()) {
             aiGenerationFailureTotal.inc();
+
             throw new Error("Empty AI response received.");
           }
 
-          // Safe, wrapper-contained parsing execution context
           const parsedData = parseAIResponse(fullResponse);
-          // @ts-expect-error Prisma JSON value
-          const safeOutput: Prisma.InputJsonValue = parsedData; // Ensure the output is a valid JSON value
-          const createStart = Date.now();
 
-          await db.generation.create({
-            data: {
-              userInput,
-              generatedOutput: safeOutput,
-              userId,
-            },
-          });
+          if (!isGuest) {
+            const createStart = Date.now();
 
-          databaseQueryDurationSeconds.observe(
-            { operation: "create" },
-            (Date.now() - createStart) / 1000,
-          );
+            await db.generation.create({
+              data: {
+                userInput,
+                generatedOutput: parsedData as Prisma.InputJsonValue,
+                userId: userId as string,
+              },
+            });
+
+            databaseQueryDurationSeconds.observe(
+              { operation: "create" },
+              (Date.now() - createStart) / 1000,
+            );
+          }
 
           aiGenerationSuccessTotal.inc();
-          userGenerationsTotal.inc({ user_id: userId });
-          userLastActivityTimestamp.set({ user_id: userId }, Date.now() / 1000);
+
+          if (!isGuest) {
+            userGenerationsTotal.inc({
+              user_id: userId as string,
+            });
+
+            userLastActivityTimestamp.set(
+              { user_id: userId as string },
+              Date.now() / 1000,
+            );
+          }
+
           aiGenerationOutputSizeBytes.set(JSON.stringify(parsedData).length);
 
           httpRequestDurationSeconds.observe(
@@ -396,15 +467,17 @@ export async function POST(req: NextRequest) {
           );
 
           // Send webhook notification for successful generation
-          await sendWebhook({
-            userId,
-            event: "generation.success",
-            // @ts-expect-error Prisma JSON value
-            data: {
-              userInput,
-              generatedOutput: parsedData,
-            },
-          });
+          if (!isGuest && userId) {
+            await sendWebhook({
+              userId,
+              event: "generation.success",
+              // @ts-expect-error Prisma JSON value
+              data: {
+                userInput,
+                generatedOutput: parsedData,
+              },
+            });
+          }
 
           controller.enqueue(
             encoder.encode(
@@ -420,16 +493,15 @@ export async function POST(req: NextRequest) {
 
           controller.close();
         } catch (error: unknown) {
-          console.error("Streaming block context error caught:", error);
+          console.error("Streaming error:", error);
+
           aiGenerationFailureTotal.inc();
 
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
                 error:
-                  error instanceof Error
-                    ? error.message
-                    : "Streaming pipeline failed",
+                  error instanceof Error ? error.message : "Streaming failed",
               })}\n\n`,
             ),
           );
@@ -448,9 +520,11 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: unknown) {
     aiGenerationFailureTotal.inc();
-    console.error("Error in generation request execution context:", error);
+
+    console.error("Error in generation request:", error);
 
     let status = 500;
+
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
 
@@ -474,7 +548,10 @@ export async function POST(req: NextRequest) {
       status = 502;
     }
 
-    apiGatewayErrorsTotal.inc({ status_code: status.toString() });
+    apiGatewayErrorsTotal.inc({
+      status_code: status.toString(),
+    });
+
     httpRequestDurationSeconds.observe(
       { route },
       (Date.now() - startTime) / 1000,

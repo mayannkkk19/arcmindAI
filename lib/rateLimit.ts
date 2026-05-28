@@ -58,6 +58,12 @@ export const generationRateLimits = redis
         analytics: true,
       }),
 
+      guest: new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(1, "1 d"),
+        analytics: true,
+      }),
+
       pro: new Ratelimit({
         redis,
         limiter: Ratelimit.slidingWindow(50, "1 h"),
@@ -73,6 +79,9 @@ export const generationRateLimits = redis
   : {
       free: {
         limit: async (key: string) => checkInMemoryLimit(key, 5, 3600000),
+      } as unknown as Ratelimit,
+      guest: {
+        limit: async (key: string) => checkInMemoryLimit(key, 1, 86400000), // 1 per day
       } as unknown as Ratelimit,
       pro: {
         limit: async (key: string) => checkInMemoryLimit(key, 50, 3600000),
