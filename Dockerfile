@@ -5,7 +5,7 @@ RUN npm install -g pnpm
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY prisma ./prisma/
 
-RUN pnpm install --frozen-lockfile
+RUN HUSKY=0 pnpm install
 RUN pnpm prisma generate
 
 EXPOSE 3000
