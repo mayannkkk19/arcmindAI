@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, AlertCircle } from "lucide-react";
+import { Clock, AlertCircle, Copy } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface Task {
   id: string;
@@ -59,6 +60,15 @@ export default function TaskCard({ task, allTasks }: TaskCardProps) {
       .join(", ");
   };
 
+  const handleCopyTask = async () => {
+    const priority =
+      task.priority.charAt(0).toUpperCase() + task.priority.slice(1);
+
+    await navigator.clipboard.writeText(
+      `[${priority}] ${task.title}: ${task.description}`,
+    );
+  };
+
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="pb-3">
@@ -80,6 +90,18 @@ export default function TaskCard({ task, allTasks }: TaskCardProps) {
             </div>
             <CardTitle className="text-lg">{task.title}</CardTitle>
           </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleCopyTask}
+            aria-label={`Copy task ${task.title}`}
+            title="Copy task"
+            className="h-8 w-8 shrink-0"
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
+
           <div className="flex items-center gap-1 text-sm text-muted-foreground shrink-0">
             <Clock className="h-4 w-4" />
             <span>{task.estimatedHours}h</span>
