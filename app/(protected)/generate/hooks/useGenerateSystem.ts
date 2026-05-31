@@ -26,6 +26,9 @@ export function useGenerateSystem(refetchHistory?: () => Promise<void>) {
     setError(null);
     setRetryAfter(null);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+
     try {
       const response = await fetch(DOC_ROUTES.API.GENERATE.ROOT, {
         method: "POST",
@@ -33,6 +36,7 @@ export function useGenerateSystem(refetchHistory?: () => Promise<void>) {
         headers: {
           "Content-Type": "application/json",
         },
+        signal: controller.signal,
         body: JSON.stringify({
           userInput,
           // @ts-expect-error id is added to session in NextAuth callbacks
@@ -139,11 +143,18 @@ export function useGenerateSystem(refetchHistory?: () => Promise<void>) {
 
       return data;
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "An error occurred";
-      setError(errorMessage);
+      if (err instanceof Error && err.name === "AbortError") {
+        setError(
+          "Request timed out. Please check your connection and try again.",
+        );
+      } else {
+        const errorMessage =
+          err instanceof Error ? err.message : "An error occurred";
+        setError(errorMessage);
+      }
       return null;
     } finally {
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   };
