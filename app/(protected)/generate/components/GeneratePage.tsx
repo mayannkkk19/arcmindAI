@@ -497,11 +497,13 @@ export default function GeneratePage() {
         <Card className="border-destructive/20 bg-destructive/5 rounded-2xl">
           <CardContent className="p-6 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-            <div className="space-y-1">
+            <div className="space-y-1 min-w-0">
               <p className="font-semibold text-destructive">
                 Generation Failed
               </p>
-              <p className="text-sm text-destructive/80">{generateError}</p>
+              <p className="text-sm text-destructive/80 break-words whitespace-pre-wrap max-h-32 overflow-auto">
+                {generateError}
+              </p>
             </div>
           </CardContent>
         </Card>
