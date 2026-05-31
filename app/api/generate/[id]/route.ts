@@ -65,7 +65,7 @@ export async function GET(
         { route },
         (Date.now() - startTime) / 1000,
       );
-      NextResponse.json({ status: 404, message: "User not Found" });
+      return NextResponse.json({ status: 404, message: "User not Found" });
     }
 
     if (user?.isVerified === false) {
@@ -176,7 +176,7 @@ export async function DELETE(
     );
 
     const dbStart = Date.now();
-    const generation = await db.generation.delete({
+    const existing = await db.generation.findFirst({
       where: {
         id: generationId,
         // @ts-expect-error id is added to the session in the session callback
@@ -184,11 +184,11 @@ export async function DELETE(
       },
     });
     databaseQueryDurationSeconds.observe(
-      { operation: "delete" },
+      { operation: "findFirst" },
       (Date.now() - dbStart) / 1000,
     );
 
-    if (!generation) {
+    if (!existing) {
       apiGatewayErrorsTotal.inc({ status_code: "404" });
       httpRequestDurationSeconds.observe(
         { route },
@@ -200,6 +200,15 @@ export async function DELETE(
       );
     }
 
+    const dbDelStart = Date.now();
+    await db.generation.delete({
+      where: { id: generationId },
+    });
+    databaseQueryDurationSeconds.observe(
+      { operation: "delete" },
+      (Date.now() - dbDelStart) / 1000,
+    );
+
     // Track total HTTP duration
     httpRequestDurationSeconds.observe(
       { route },
@@ -208,7 +217,7 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      output: generation,
+      message: "Generation deleted successfully",
     });
   } catch (error) {
     console.error("Error fetching generation:", error);

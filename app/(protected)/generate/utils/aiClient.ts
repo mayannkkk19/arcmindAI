@@ -14,7 +14,7 @@ const geminiLLM = new ChatGoogleGenerativeAI({
 const geminiLLM_2 = new ChatGoogleGenerativeAI({
   model: "gemini-2.5-flash-lite",
   temperature: 0.7,
-  apiKey: process.env.GEMINI_API_KEY_UNSECURED,
+  apiKey: process.env.GEMINI_API_KEY_ALTERNATE,
   streaming: true,
 });
 

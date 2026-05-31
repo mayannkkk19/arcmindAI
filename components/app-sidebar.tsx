@@ -252,6 +252,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <Skeleton className="h-6 w-6 rounded-full mr-2" />
                     <Skeleton className="h-4 w-24" />
                   </div>
+                ) : !session ? (
+                  <SidebarMenuButton asChild className={wrapMenuItemClassName}>
+                    <Button
+                      variant="default"
+                      className="cursor-pointer w-full"
+                      asChild
+                    >
+                      <Link href={DOC_ROUTES.AUTH.SIGN_UP}>
+                        Sign Up to Save
+                      </Link>
+                    </Button>
+                  </SidebarMenuButton>
                 ) : (
                   <SidebarMenuButton asChild className={wrapMenuItemClassName}>
                     <Button
@@ -299,51 +311,53 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   </SidebarMenuButton>
                 )}
               </SidebarMenuItem>
-              <Dialog
-                open={isLogoutDialogOpen}
-                onOpenChange={setIsLogoutDialogOpen}
-              >
-                <DialogTrigger asChild>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild>
+              {session && (
+                <Dialog
+                  open={isLogoutDialogOpen}
+                  onOpenChange={setIsLogoutDialogOpen}
+                >
+                  <DialogTrigger asChild>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild>
+                        <Button
+                          variant="ghost"
+                          className="cursor-pointer w-full justify-start"
+                        >
+                          <LogOut className="cursor-pointer mr-2 h-4 w-4" />
+                          Logout
+                        </Button>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Confirm Logout</DialogTitle>
+                      <DialogDescription>
+                        Are you sure you want to log out? You will be redirected
+                        to the home page.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
                       <Button
-                        variant="ghost"
-                        className="cursor-pointer w-full justify-start"
+                        variant="outline"
+                        onClick={() => setIsLogoutDialogOpen(false)}
+                        disabled={isLoggingOut}
+                        className="cursor-pointer"
                       >
-                        <LogOut className="cursor-pointer mr-2 h-4 w-4" />
-                        Logout
+                        Cancel
                       </Button>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Confirm Logout</DialogTitle>
-                    <DialogDescription>
-                      Are you sure you want to log out? You will be redirected
-                      to the home page.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setIsLogoutDialogOpen(false)}
-                      disabled={isLoggingOut}
-                      className="cursor-pointer"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={handleLogout}
-                      disabled={isLoggingOut}
-                      className="cursor-pointer"
-                    >
-                      {isLoggingOut ? "Logging out..." : "Logout"}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                      <Button
+                        variant="destructive"
+                        onClick={handleLogout}
+                        disabled={isLoggingOut}
+                        className="cursor-pointer"
+                      >
+                        {isLoggingOut ? "Logging out..." : "Logout"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

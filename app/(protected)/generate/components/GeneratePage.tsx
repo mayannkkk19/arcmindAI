@@ -12,6 +12,11 @@ import { ArchitectureData } from "../utils/types";
 import { useGenerateSystem } from "../hooks/useGenerateSystem";
 import StarRating from "@/components/ui/star-rating";
 
+import { useSession } from "next-auth/react";
+import Link from "next/link";
+import { Lock } from "lucide-react";
+import { DOC_ROUTES } from "@/lib/routes";
+import GuestSignupPrompt from "./GuestSignupPrompt";
 import { useHistory } from "@/lib/contexts/HistoryContext";
 import Lottie from "lottie-react";
 import { AlertCircle, RotateCw, Send, Sparkles } from "lucide-react";
@@ -26,6 +31,11 @@ import EntitiesSection from "./EntitiesSection";
 import InfrastructureSection from "./InfrastructureSection";
 import MermaidDiagram from "./mermaidDiagram";
 import MicroservicesSection from "./MicroservicesSection";
+
+const GUEST_GENERATION_STORAGE_KEY = "arcmind.guest.generations.used";
+const GUEST_GENERATION_COOKIE_KEY = "arcmind_guest_generations_used";
+const GUEST_UNSAVED_GENERATION_KEY = "arcmind.guest.unsaved_generation";
+const MAX_FREE_GUEST_GENERATIONS = 1;
 
 export default function GeneratePage() {
   const { refetch } = useHistory();
@@ -55,6 +65,91 @@ export default function GeneratePage() {
   const submittedTextRef = useRef<string>("");
 
   const userInput = watch("userInput", "");
+
+  const { data: session, status } = useSession();
+  const [guestGenerationsUsed, setGuestGenerationsUsed] = useState(0);
+  const [isGuestPromptOpen, setIsGuestPromptOpen] = useState(false);
+
+  const isAuthenticated = Boolean(
+    // @ts-expect-error id is added to session in NextAuth callbacks
+    session?.user?.id,
+  );
+  const isGuestReady = status !== "loading" && !isAuthenticated;
+  const isGuestLocked =
+    isGuestReady && guestGenerationsUsed >= MAX_FREE_GUEST_GENERATIONS;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const storedCountStr = localStorage.getItem(GUEST_GENERATION_STORAGE_KEY);
+
+    if (storedCountStr !== null) {
+      const storedCount = Number.parseInt(storedCountStr, 10);
+      if (!Number.isNaN(storedCount)) {
+        setGuestGenerationsUsed(storedCount);
+        return;
+      }
+    }
+
+    const cookieValue = document.cookie
+      .split(";")
+      .map((entry) => entry.trim())
+      .find((entry) => entry.startsWith(`${GUEST_GENERATION_COOKIE_KEY}=`))
+      ?.split("=")[1];
+
+    const parsedCookieValue = Number.parseInt(cookieValue || "0", 10);
+    setGuestGenerationsUsed(
+      Number.isNaN(parsedCookieValue) ? 0 : parsedCookieValue,
+    );
+  }, []);
+
+  const persistGuestUsage = (count: number) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(GUEST_GENERATION_STORAGE_KEY, count.toString());
+    document.cookie = `${GUEST_GENERATION_COOKIE_KEY}=${count}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+  };
+
+  // Sync or restore unsaved guest generation
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleUnsavedGeneration = async () => {
+      const unsaved = localStorage.getItem(GUEST_UNSAVED_GENERATION_KEY);
+      if (!unsaved) return;
+
+      if (isAuthenticated) {
+        try {
+          const { userInput, generatedData } = JSON.parse(unsaved);
+          const res = await fetch("/api/generate/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userInput, generatedOutput: generatedData }),
+          });
+          if (res.ok) {
+            localStorage.removeItem(GUEST_UNSAVED_GENERATION_KEY);
+            refetch();
+          }
+        } catch (error) {
+          console.error("Failed to sync guest generation:", error);
+        }
+      } else {
+        // Restore to UI for guests on refresh
+        try {
+          const { userInput, generatedData: savedData } = JSON.parse(unsaved);
+          if (savedData) {
+            setGeneratedData(savedData);
+            if (userInput) {
+              setValue("userInput", userInput);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to restore guest generation:", error);
+        }
+      }
+    };
+
+    handleUnsavedGeneration();
+  }, [isAuthenticated, refetch, setValue]);
 
   // Auto-expand textarea height
   useEffect(() => {
@@ -106,6 +201,11 @@ export default function GeneratePage() {
   };
 
   const handleGenerate = async () => {
+    if (isGuestLocked) {
+      setIsGuestPromptOpen(true);
+      return;
+    }
+
     setGeneratedData(null);
     setStreamingProgress("");
 
@@ -135,8 +235,9 @@ export default function GeneratePage() {
           setGenerationId(result.generationId);
         }
 
+        let finalParsedData: ArchitectureData | null = null;
         if (result.parsedData) {
-          setGeneratedData(result.parsedData);
+          finalParsedData = result.parsedData;
         } else {
           // Fallback to manual parsing if backend didn't provide parsedData
           try {
@@ -216,10 +317,24 @@ export default function GeneratePage() {
               }
             }
 
-            setGeneratedData(parsedData);
+            finalParsedData = parsedData;
           } catch (parseError) {
             console.error("Failed to parse generated data:", parseError);
             setGeneratedData(null);
+          }
+        }
+
+        if (finalParsedData) {
+          setGeneratedData(finalParsedData);
+          if (isGuestReady) {
+            const updatedCount = guestGenerationsUsed + 1;
+            setGuestGenerationsUsed(updatedCount);
+            persistGuestUsage(updatedCount);
+
+            localStorage.setItem(
+              GUEST_UNSAVED_GENERATION_KEY,
+              JSON.stringify({ userInput, generatedData: finalParsedData }),
+            );
           }
         }
       } else {
@@ -268,8 +383,42 @@ export default function GeneratePage() {
 
   return (
     <div className="container max-w-5xl mx-auto p-8 space-y-12">
+      <GuestSignupPrompt
+        open={isGuestPromptOpen}
+        onOpenChange={setIsGuestPromptOpen}
+      />
       {!generatedData && (
         <div className="space-y-4">
+          {isGuestLocked && (
+            <Card className="border-border/60 bg-card/40 rounded-2xl shadow-sm">
+              <CardContent className="p-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <p className="font-semibold flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-primary" />
+                    Guest mode limit reached
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Sign up to save your architecture history and continue
+                    generating.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="rounded-xl"
+                    onClick={() => setIsGuestPromptOpen(true)}
+                  >
+                    View Benefits
+                  </Button>
+                  <Button className="rounded-xl" asChild>
+                    <Link href={DOC_ROUTES.AUTH.SIGN_UP}>
+                      Create Free Account
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-border/50 to-border/50 rounded-2xl blur opacity-25 group-focus-within:opacity-100 transition duration-1000 group-focus-within:duration-200"></div>
             <Card className="relative border-border/60 shadow-lg bg-card/50 backdrop-blur-xl rounded-2xl overflow-hidden">
@@ -294,7 +443,12 @@ export default function GeneratePage() {
 
                     <Button
                       onClick={() => handleGenerate()}
-                      disabled={isLoading || !userInput.trim() || isRateLimited}
+                      disabled={
+                        isLoading ||
+                        !userInput.trim() ||
+                        isRateLimited ||
+                        isGuestLocked
+                      }
                       size="lg"
                       className="rounded-xl px-6 transition-all duration-300 active:scale-95"
                     >
@@ -568,6 +722,50 @@ export default function GeneratePage() {
       {generatedData && !isLoading && (
         <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-1000">
           <div className="space-y-4">
+            {isGuestReady && (
+              <Card className="border-border/60 bg-card/40 rounded-2xl shadow-sm">
+                <CardContent className="py-4 px-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    You are using{" "}
+                    <span className="font-medium">Guest Mode</span>. Save this
+                    and continue generating by creating an account.
+                  </p>
+                  <Button className="rounded-xl" asChild>
+                    <Link href={DOC_ROUTES.AUTH.SIGN_UP}>Sign Up to Save</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+            {isGuestLocked && (
+              <Card className="border-border/60 bg-card/40 rounded-2xl shadow-sm">
+                <CardContent className="p-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-1">
+                    <p className="font-semibold flex items-center gap-2">
+                      <Lock className="w-4 h-4 text-primary" />
+                      Guest mode limit reached
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Sign up to save your architecture history and continue
+                      generating.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => setIsGuestPromptOpen(true)}
+                    >
+                      View Benefits
+                    </Button>
+                    <Button className="rounded-xl" asChild>
+                      <Link href={DOC_ROUTES.AUTH.SIGN_UP}>
+                        Create Free Account
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             <div className="flex items-center gap-2 mb-2">
               <div className="h-px flex-1 bg-border/60"></div>
               <Sparkles className="w-4 h-4 text-muted-foreground/60" />

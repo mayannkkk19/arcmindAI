@@ -31,15 +31,16 @@ export default function GenerateLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { history } = useHistory();
+  const isGuestAllowedRoute = pathname === DOC_ROUTES.GENERATE;
 
   useEffect(() => {
     if (status === "loading") return;
-    if (!session) {
+    if (!session && !isGuestAllowedRoute) {
       router.push(DOC_ROUTES.AUTH.LOGIN);
     }
-  }, [session, status, router]);
+  }, [session, status, router, isGuestAllowedRoute]);
 
-  if (!session) {
+  if (!session && !isGuestAllowedRoute) {
     return null;
   }
 

@@ -22,7 +22,7 @@
     "*.{js,jsx,ts,tsx,json,css,md}": "prettier --write"
   },
   "dependencies": {
-    "@google/genai": "^1.51.0",
+    "@google/genai": "^2.6.0",
     "@hookform/resolvers": "^5.2.2",
     "@langchain/core": "^1.1.45",
     "@langchain/google-genai": "^2.1.30",
@@ -64,7 +64,6 @@
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.575.0",
     "mermaid": "^11.14.0",
-    "mongoose": "^9.6.2",
     "nanoid": "^5.1.11",
     "next": "16.2.6",
     "next-auth": "^4.24.14",

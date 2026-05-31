@@ -5,7 +5,8 @@ const DEFAULT_MAX_BYTES = 750 * 1024;
 const MAX_BYTES = Number(process.env.API_BODY_LIMIT_BYTES) || DEFAULT_MAX_BYTES;
 
 export function proxy(req: NextRequest) {
-  if (!["POST", "PUT", "PATCH"].includes(req.method)) return;
+  if (!["POST", "PUT", "PATCH"].includes(req.method))
+    return NextResponse.next();
 
   const declared = req.headers.get("content-length");
   if (!declared) return;

@@ -20,7 +20,8 @@ import {
   apiGatewayErrorsTotal,
   databaseQueryDurationSeconds,
 } from "@/lib/metrics";
-
+import { sendWebhook } from "@/lib/webhooks/sendWebhook";
+import { Prisma } from "@prisma/client";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -66,7 +67,11 @@ function extractTextFromChunk(chunk: unknown): string {
   return "";
 }
 
-function parseAIResponse(fullResponse: string) {
+/**
+ * Robust JSON extraction with resilient error containment and self-healing capabilities.
+ * Prevents prompt injection payloads from generating unhandled SyntaxErrors during JSON parsing.
+ */
+function parseAIResponse(fullResponse: string): Record<string, unknown> {
   let jsonText = fullResponse;
 
   const jsonStartMarker = "```json";
@@ -109,11 +114,79 @@ function parseAIResponse(fullResponse: string) {
   jsonText = jsonText.trim();
 
   if (!jsonText) {
-    throw new Error("No JSON content found in AI response.");
+    return {
+      success: false,
+      error:
+        "No JSON payload structure could be localized in the raw stream buffer.",
+      "System Error": "Format mismatch",
+    };
   }
 
-  const parsedData = JSON.parse(jsonText);
+  let parsedData: Record<string, unknown>;
 
+  try {
+    parsedData = JSON.parse(jsonText);
+  } catch (initialParseError) {
+    console.warn(
+      "⚠️ Initial JSON parser pass failed. Attempting structural recovery procedures:",
+      initialParseError,
+    );
+
+    // Attempt Self-Healing 1: Try closing outstanding brackets for truncated responses
+    try {
+      let openBraces = 0;
+      let openBrackets = 0;
+      let inString = false;
+      let escaped = false;
+
+      for (let i = 0; i < jsonText.length; i++) {
+        const char = jsonText[i];
+        if (char === "\\" && inString) {
+          escaped = !escaped;
+          continue;
+        }
+        if (char === '"' && !escaped) {
+          inString = !inString;
+        }
+        escaped = false;
+
+        if (!inString) {
+          if (char === "{") openBraces++;
+          if (char === "}") openBraces--;
+          if (char === "[") openBrackets++;
+          if (char === "]") openBrackets--;
+        }
+      }
+
+      let healedJson = jsonText;
+      if (inString) {
+        healedJson += '"'; // Close unclosed quote
+      }
+      if (openBrackets > 0) {
+        healedJson += "]".repeat(openBrackets); // Close unclosed arrays
+      }
+      if (openBraces > 0) {
+        healedJson += "}".repeat(openBraces); // Close unclosed objects
+      }
+
+      parsedData = JSON.parse(healedJson);
+    } catch (healingError) {
+      console.error(
+        "🚨 Auto-healing parser phase failed to salvage malformed schema token space:",
+        healingError,
+      );
+
+      // Attempt Self-Healing 2: Fallback to structured object wrapper matching the expected shape
+      parsedData = {
+        success: false,
+        error: "AI Generation returned malformed structural layout.",
+        rawOutputText:
+          jsonText.slice(0, 1000) + (jsonText.length > 1000 ? "..." : ""),
+      };
+    }
+  }
+
+  // Safe extraction of Mermaid visual blueprints
   const mermaidStartMarker = "```mermaid";
 
   const mermaidStart = fullResponse.indexOf(mermaidStartMarker);
@@ -150,19 +223,13 @@ export async function POST(req: NextRequest) {
 
   httpRequestsTotal.inc({ route, method });
 
+  let userId: string | undefined;
+
   try {
-    // SECURE AUTH — get userId from server session
     const session = await getServerSession(authOptions);
-
     // @ts-expect-error id is added to session in session callback
-    const userId = session?.user?.id;
-
-    if (!userId) {
-      apiGatewayErrorsTotal.inc({ status_code: "401" });
-
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
+    userId = session?.user?.id as string | undefined;
+    const isGuest = !userId;
     const body = await req.json().catch(() => null);
 
     if (!body || !body.userInput) {
@@ -192,48 +259,65 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Fetch authenticated user
-    const userFindStart = Date.now();
+    let user: { plan: string; isVerified: boolean } | null = null;
+    let userPlan: "free" | "pro" | "enterprise" = "free";
 
-    const user = await db.user.findFirst({
-      where: { id: userId },
-    });
+    if (!isGuest) {
+      const userFindStart = Date.now();
 
-    databaseQueryDurationSeconds.observe(
-      { operation: "findFirst" },
-      (Date.now() - userFindStart) / 1000,
-    );
+      user = await db.user.findFirst({
+        where: { id: userId },
+        select: {
+          plan: true,
+          isVerified: true,
+        },
+      });
 
-    if (!user) {
-      apiGatewayErrorsTotal.inc({ status_code: "404" });
-
-      httpRequestDurationSeconds.observe(
-        { route },
-        (Date.now() - startTime) / 1000,
+      databaseQueryDurationSeconds.observe(
+        { operation: "findFirst" },
+        (Date.now() - userFindStart) / 1000,
       );
 
-      return NextResponse.json(
-        { status: 404, message: "User not Found" },
-        { status: 404 },
-      );
-    }
+      if (!user) {
+        apiGatewayErrorsTotal.inc({ status_code: "404" });
 
-    if (user.isVerified === false) {
-      apiGatewayErrorsTotal.inc({ status_code: "401" });
+        httpRequestDurationSeconds.observe(
+          { route },
+          (Date.now() - startTime) / 1000,
+        );
 
-      httpRequestDurationSeconds.observe(
-        { route },
-        (Date.now() - startTime) / 1000,
-      );
+        return NextResponse.json(
+          { status: 404, message: "User not Found" },
+          { status: 404 },
+        );
+      }
 
-      return NextResponse.json(
-        { status: 401, message: "Email is not verified" },
-        { status: 401 },
-      );
+      if (user.isVerified === false) {
+        apiGatewayErrorsTotal.inc({ status_code: "401" });
+
+        httpRequestDurationSeconds.observe(
+          { route },
+          (Date.now() - startTime) / 1000,
+        );
+
+        return NextResponse.json(
+          { status: 401, message: "Email is not verified" },
+          { status: 401 },
+        );
+      }
+
+      userPlan =
+        user.plan === "enterprise"
+          ? "enterprise"
+          : user.plan === "pro"
+            ? "pro"
+            : "free";
     }
 
     // RATE LIMITING — skip only if user has their own Gemini API key
-    const userApiKeys = await getUserApiKeys(userId);
+    const userApiKeys = isGuest
+      ? { geminiApiKey: null }
+      : await getUserApiKeys(userId as string);
 
     const hasOwnApiKey = !!userApiKeys.geminiApiKey;
 
@@ -242,14 +326,22 @@ export async function POST(req: NextRequest) {
     let reset: number | null = null;
 
     if (!hasOwnApiKey) {
-      const rateLimiter =
-        user.plan === "enterprise"
+      const rateLimiter = isGuest
+        ? generationRateLimits.guest
+        : userPlan === "enterprise"
           ? generationRateLimits.enterprise
-          : user.plan === "pro"
+          : userPlan === "pro"
             ? generationRateLimits.pro
             : generationRateLimits.free;
 
-      const result = await rateLimiter.limit(userId);
+      const forwardedFor = req.headers.get("x-forwarded-for");
+      const realIp = req.headers.get("x-real-ip");
+      const extractedIp =
+        (forwardedFor ? forwardedFor.split(",")[0].trim() : realIp) || "guest";
+
+      const limitKey = isGuest ? `guest_${extractedIp}` : (userId as string);
+
+      const result = await rateLimiter.limit(limitKey);
 
       const { success } = result;
 
@@ -267,8 +359,9 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json(
           {
-            error:
-              user.plan === "free"
+            error: isGuest
+              ? "Guest users can generate 1 architecture per day."
+              : userPlan === "free"
                 ? "Free users can generate 5 architectures per hour."
                 : "Rate limit exceeded. Please try again later.",
             retryAfter: new Date(reset).toISOString(),
@@ -282,7 +375,12 @@ export async function POST(req: NextRequest) {
 
     aiGenerationRequestsTotal.inc();
 
-    userLastActivityTimestamp.set({ user_id: userId }, Date.now() / 1000);
+    if (!isGuest) {
+      userLastActivityTimestamp.set(
+        { user_id: userId as string },
+        Date.now() / 1000,
+      );
+    }
 
     const messages = [
       new SystemMessage(SystemPrompt),
@@ -293,7 +391,7 @@ export async function POST(req: NextRequest) {
 
     const stream = await streamGeminiWithFallback(
       messages,
-      userApiKeys.geminiApiKey,
+      userApiKeys.geminiApiKey || undefined,
     );
 
     const encoder = new TextEncoder();
@@ -331,7 +429,8 @@ export async function POST(req: NextRequest) {
 
           const parsedData = parseAIResponse(fullResponse);
 
-          const createStart = Date.now();
+          if (!isGuest) {
+            const createStart = Date.now();
 
           const savedGeneration = await db.generation.create({
             data: {
@@ -341,18 +440,24 @@ export async function POST(req: NextRequest) {
             },
           });
 
-          databaseQueryDurationSeconds.observe(
-            { operation: "create" },
-            (Date.now() - createStart) / 1000,
-          );
+            databaseQueryDurationSeconds.observe(
+              { operation: "create" },
+              (Date.now() - createStart) / 1000,
+            );
+          }
 
           aiGenerationSuccessTotal.inc();
 
-          userGenerationsTotal.inc({
-            user_id: userId,
-          });
+          if (!isGuest) {
+            userGenerationsTotal.inc({
+              user_id: userId as string,
+            });
 
-          userLastActivityTimestamp.set({ user_id: userId }, Date.now() / 1000);
+            userLastActivityTimestamp.set(
+              { user_id: userId as string },
+              Date.now() / 1000,
+            );
+          }
 
           aiGenerationOutputSizeBytes.set(JSON.stringify(parsedData).length);
 
@@ -360,6 +465,19 @@ export async function POST(req: NextRequest) {
             { route },
             (Date.now() - startTime) / 1000,
           );
+
+          // Send webhook notification for successful generation
+          if (!isGuest && userId) {
+            await sendWebhook({
+              userId,
+              event: "generation.success",
+              // @ts-expect-error Prisma JSON value
+              data: {
+                userInput,
+                generatedOutput: parsedData,
+              },
+            });
+          }
 
           controller.enqueue(
             encoder.encode(
@@ -440,6 +558,17 @@ export async function POST(req: NextRequest) {
       (Date.now() - startTime) / 1000,
     );
 
+    // Send webhook notification for failed generation
+    if (userId) {
+      await sendWebhook({
+        userId,
+        event: "generation.failed",
+        data: {
+          error:
+            error instanceof Error ? error.message : "Unknown generation error",
+        },
+      });
+    }
     return NextResponse.json(
       {
         error:
