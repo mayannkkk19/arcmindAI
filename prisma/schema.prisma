@@ -60,6 +60,7 @@ model Generation {
   shareId          String?  @unique
   userId           String   @db.ObjectId
   user             User     @relation(fields: [userId], references: [id])
+  rating           Int?     
 
   @@index([userId])
 }
