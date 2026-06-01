@@ -54,13 +54,23 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (!user?.githubAccessToken) {
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "User not found",
+        } as AnalyzeRepositoryResponse,
+        { status: 404 },
+      );
+    }
+
+    if (!user.githubAccessToken) {
       return NextResponse.json(
         {
           success: false,
           error: "GitHub not connected",
         } as AnalyzeRepositoryResponse,
-        { status: 400 },
+        { status: 403 },
       );
     }
 
