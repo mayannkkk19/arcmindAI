@@ -297,7 +297,7 @@ export async function PUT(
     const isPro =
       user?.plan !== "free" || !!user?.geminiApiKey || !!user?.openaiApiKey;
     if (!isPro) {
-      apiGatewayErrorsTotal.inc({ status_code: "401" });
+      apiGatewayErrorsTotal.inc({ status_code: "403" });
       httpRequestDurationSeconds.observe(
         { route },
         (Date.now() - startTime) / 1000,
@@ -307,7 +307,7 @@ export async function PUT(
           success: false,
           message: "Purchase the pro version to use this feature",
         },
-        { status: 401 },
+        { status: 403 },
       );
     }
 

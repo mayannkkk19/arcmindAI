@@ -80,11 +80,11 @@ export async function POST(
     const isPro =
       user?.plan !== "free" || !!user?.geminiApiKey || !!user?.openaiApiKey;
     if (!isPro) {
-      httpRequestsTotal.inc({ route, method, status_code: "401" });
-      apiGatewayErrorsTotal.inc({ status_code: "401" });
+      httpRequestsTotal.inc({ route, method, status_code: "403" });
+      apiGatewayErrorsTotal.inc({ status_code: "403" });
       end();
       return NextResponse.json({
-        status: 401,
+        status: 403,
         message: "Purchase the pro version to use this feature",
       });
     }
