@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
       },
       select: {
         githubAccessToken: true,
+        isVerified: true,
       },
     });
 
@@ -59,7 +60,17 @@ export async function POST(request: NextRequest) {
           success: false,
           error: "GitHub not connected",
         } as AnalyzeRepositoryResponse,
-        { status: 403 },
+        { status: 400 },
+      );
+    }
+
+    if (!user.isVerified) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Email is not verified",
+        } as AnalyzeRepositoryResponse,
+        { status: 401 },
       );
     }
 
